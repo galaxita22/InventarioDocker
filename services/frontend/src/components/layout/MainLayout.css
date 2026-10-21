@@ -1,0 +1,15 @@
+.layout-principal {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  background-color: #f8fafc;
+}
+
+.contenido-derecho {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 32px 40px; /* Más espacio a los lados para que no se vea apretado */
+  overflow-y: auto;
+  background-color: #f8fafc;
+}

@@ -1,0 +1,16 @@
+:root {
+  --color-primario: #0f172a; /* Azul marino profundo */
+  --color-secundario: #3b82f6; /* Celeste/Azul claro para acentos */
+  --texto-blanco: #f8fafc;
+  --texto-oscuro: #1e293b;
+  --texto-gris: #64748b;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  background-color: var(--color-primario);
+  color: var(--texto-blanco);
+  min-height: 100vh;
+}

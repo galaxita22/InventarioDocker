@@ -1,0 +1,25 @@
+/* Fuerza la fuente moderna en toda la aplicación y quita márgenes por defecto */
+* {
+  font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #f8fafc; /* Color gris muy claro del mockup */
+  overflow: hidden; /* Evita el scroll global doble */
+}
+
+/* Forzar que el layout ocupe exactamente el 100% de la ventana */
+
+
+/* El contenido derecho debe expandirse y tener su propio scroll */
+.contenido-derecho {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 32px 40px; /* Más espacio a los lados para que no se vea apretado */
+  overflow-y: auto;
+  background-color: #f8fafc;
+}
