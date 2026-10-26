@@ -13,6 +13,7 @@ interface Solicitud {
   createdAt: string;
   Solicitante?: { id: number; nombre_usuario: string; email: string }; // Agregamos el id aquí
   Activo?: { descripcion: string; categoria: string };
+  observaciones?: string; // para cuando se rechaza una solicitud
 }
 
 export default function SolicitudesPage() {
@@ -88,7 +89,9 @@ export default function SolicitudesPage() {
       const res = await api.post('/api/solicitudes', payload);
       
       // El backend que armaste devuelve el objeto dentro de "res.data.datos"
-      setSolicitudes([res.data.datos, ...solicitudes]);
+      if (res.data.solicitud) {
+        setSolicitudes([res.data.solicitud, ...solicitudes]);
+      }
       setModalAbierto(false); 
       setFormSolicitud({ activo_id: '', tipo_operacion: 'asignacion', justificacion: '', ubicacion_destino_id: '' }); 
       
@@ -97,17 +100,31 @@ export default function SolicitudesPage() {
     }
   };
 
+  const esAprobador = ['administrador', 'aprobador', 'supervisor'].includes(usuarioActual?.role?.toLowerCase());
+const [tabActiva, setTabActiva] = useState(esAprobador ? 'gestion' : 'mis_solicitudes');
+
   // Métricas
   const total = solicitudes.length;
-  const enRevision = solicitudes.filter(s => s.estado.toLowerCase() === 'pendiente').length;
-  const aprobadas = solicitudes.filter(s => s.estado.toLowerCase() === 'aprobada').length;
-  const rechazadas = solicitudes.filter(s => s.estado.toLowerCase() === 'rechazada').length;
+  const enRevision = solicitudes.filter(s => s?.estado.toLowerCase() === 'pendiente').length;
+  const aprobadas = solicitudes.filter(s => s?.estado.toLowerCase() === 'aprobada').length;
+  const rechazadas = solicitudes.filter(s => s?.estado.toLowerCase() === 'rechazada').length;
 
   // Filtrado
-  const solicitudesFiltradas = solicitudes.filter(sol => 
-    sol.codigo_solicitud?.toLowerCase().includes(busqueda.toLowerCase()) ||
-    sol.Activo?.descripcion?.toLowerCase().includes(busqueda.toLowerCase())
-  );
+  const solicitudesPorPestana = solicitudes.filter(sol => {
+  const esPropia = String(sol.solicitante_id) === String(usuarioActual?.id) || String(sol.Solicitante?.id) === String(usuarioActual?.id);
+  
+  if (tabActiva === 'mis_solicitudes') {
+    return esPropia;
+  } else {
+    // Si es la pestaña de gestión, muestra todo EXCEPTO las propias
+    return !esPropia;
+  }
+});
+
+const solicitudesFiltradas = solicitudesPorPestana.filter(sol =>
+  sol.codigo_solicitud?.toLowerCase().includes(busqueda.toLowerCase()) ||
+  sol.Activo?.descripcion?.toLowerCase().includes(busqueda.toLowerCase())
+);
 
   return (
     <div className="page-container">
@@ -154,6 +171,28 @@ export default function SolicitudesPage() {
         </div>
       </div>
 
+      {/* PESTAÑAS (TABS) */}
+      <div className="tabs-container">
+        <button 
+          className={`btn-tab ${tabActiva === 'mis_solicitudes' ? 'active' : ''}`}
+          onClick={() => setTabActiva('mis_solicitudes')}
+        >
+          Mis Solicitudes
+        </button>
+        
+        {esAprobador && (
+          <button 
+            className={`btn-tab ${tabActiva === 'gestion' ? 'active' : ''}`}
+            onClick={() => setTabActiva('gestion')}
+          >
+            Para Gestionar
+          </button>
+        )}
+      </div>
+
+{/* SECCIÓN DE TABLA */}
+<div className="table-section"></div>
+
       {/* SECCIÓN DE TABLA */}
       <div className="table-section">
         <div className="table-toolbar">
@@ -171,69 +210,83 @@ export default function SolicitudesPage() {
           </div>
         </div>
 
-        <table className="solicitudes-table">
-          <thead>
-            <tr>
-              <th>N° SOLICITUD</th>
-              <th>ACTIVO / CATEGORÍA</th>
-              <th>TIPO / DETALLE</th>
-              <th>FECHA</th>
-              <th>ESTADO</th>
-              <th>ACCIONES (ADMIN)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cargando ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>Cargando...</td></tr>
-            ) : solicitudesFiltradas.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>No hay solicitudes</td></tr>
-            ) : (
-              solicitudesFiltradas.map((sol) => (
-                <tr key={sol.id}>
-                  <td className="text-blue font-semibold">{sol.codigo_solicitud || `SOL-00${sol.id}`}</td>
-                  <td>
-                    <div className="cell-primary">{sol.Activo?.descripcion || 'No especificado'}</div>
-                    <div className="cell-secondary">{sol.Activo?.categoria || 'Sin categoría'}</div>
-                  </td>
-                  <td>
-                    <div className="cell-primary" style={{ textTransform: 'capitalize' }}>{sol.tipo_operacion}</div>
-                    <div className="cell-secondary">{sol.justificacion || 'Sin detalle'}</div>
-                  </td>
-                  <td>{new Date(sol.createdAt).toLocaleDateString('es-CL')}</td>
-                  <td>
-                    <span className={`badge-estado ${sol.estado.toLowerCase()}`}>
-                      {sol.estado.charAt(0).toUpperCase() + sol.estado.slice(1)}
-                    </span>
-                  </td>
-                    <td>
-                {(String(sol.solicitante_id) === String(usuarioActual?.id) || String(sol.Solicitante?.id) === String(usuarioActual?.id)) ? (
-                    <span style={{ fontSize: '0.85rem', color: '#eab308', fontStyle: 'italic', fontWeight: '500' }}>
-                    Requiere otro aprobador
-                    </span>
-                ) : (
-                    <div className="admin-actions">
-                    <button 
-                        className="btn-aprobar"
-                        onClick={() => evaluarSolicitud(sol.id, 'aprobada')}
-                        title="Aprobar Solicitud"
-                    >
-                        <CheckCircle size={18} />
-                    </button>
-                    <button 
-                        className="btn-rechazar"
-                        onClick={() => evaluarSolicitud(sol.id, 'rechazada')}
-                        title="Rechazar Solicitud"
-                    >
-                        <AlertTriangle size={18} />
-                    </button>
-                    </div>
-                )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+        {tabActiva === 'mis_solicitudes' ? (
+  <div className="mis-solicitudes-grid">
+    {solicitudesFiltradas.length === 0 ? (
+      <p style={{ color: '#64748b', gridColumn: '1 / -1', textAlign: 'center', padding: '2rem' }}>No tienes solicitudes registradas.</p>
+    ) : (
+      solicitudesFiltradas.map((sol) => (
+        <div key={sol.id} className="solicitud-card">
+          <div className="card-header">
+            <div>
+              <h3>{sol.Activo?.descripcion || 'No especificado'}</h3>
+              <p>{sol.codigo_solicitud || `SOL-00${sol.id}`}</p>
+            </div>
+            <span className={`badge-estado ${sol.estado?.toLowerCase()}`}>
+              {sol.estado?.charAt(0).toUpperCase() + sol.estado?.slice(1)}
+            </span>
+          </div>
+          <div className="card-body">
+            <p><strong>Tipo:</strong> <span style={{ textTransform: 'capitalize' }}>{sol.tipo_operacion}</span></p>
+            <p><strong>Motivo:</strong> {sol.justificacion || sol.observaciones || 'Sin detalle'}</p>
+            <p><strong>Fecha:</strong> {new Date(sol.createdAt).toLocaleDateString('es-CL')}</p>
+          </div>
+        </div>
+      ))
+    )}
+  </div>
+) : (
+  <table className="solicitudes-table">
+    {/* PEGA AQUÍ EL MISMO THEAD Y TBODY QUE YA TENÍAS PARA LA TABLA */}
+    <thead>
+      <tr>
+        <th>N° SOLICITUD</th>
+        <th>ACTIVO / CATEGORÍA</th>
+        <th>TIPO / DETALLE</th>
+        <th>FECHA</th>
+        <th>ESTADO</th>
+        <th>ACCIONES (ADMIN)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {cargando ? (
+        <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>Cargando...</td></tr>
+      ) : solicitudesFiltradas.length === 0 ? (
+        <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>No hay solicitudes para gestionar</td></tr>
+      ) : (
+        solicitudesFiltradas.map((sol) => (
+          <tr key={sol.id}>
+            <td className="text-blue font-semibold">{sol.codigo_solicitud || `SOL-00${sol.id}`}</td>
+            <td>
+              <div className="cell-primary">{sol.Activo?.descripcion || 'No especificado'}</div>
+              <div className="cell-secondary">{sol.Activo?.categoria || 'Sin categoría'}</div>
+            </td>
+            <td>
+              <div className="cell-primary" style={{ textTransform: 'capitalize' }}>{sol.tipo_operacion}</div>
+              <div className="cell-secondary">{sol.justificacion || sol.observaciones || 'Sin detalle'}</div>
+            </td>
+            <td>{new Date(sol.createdAt).toLocaleDateString('es-CL')}</td>
+            <td>
+              <span className={`badge-estado ${sol.estado?.toLowerCase()}`}>
+                {sol.estado?.charAt(0).toUpperCase() + sol.estado?.slice(1)}
+              </span>
+            </td>
+            <td>
+              <div className="admin-actions">
+                <button className="btn-aprobar" onClick={() => evaluarSolicitud(sol.id, 'aprobada')} title="Aprobar Solicitud">
+                  <CheckCircle size={18} />
+                </button>
+                <button className="btn-rechazar" onClick={() => evaluarSolicitud(sol.id, 'rechazada')} title="Rechazar Solicitud">
+                  <AlertTriangle size={18} />
+                </button>
+              </div>
+            </td>
+          </tr>
+        ))
+      )}
+    </tbody>
+  </table>
+)}
       </div>
 
       {/* MODAL DE NUEVA SOLICITUD */}

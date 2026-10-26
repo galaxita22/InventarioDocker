@@ -8,7 +8,7 @@ const router = Router();
 router.post('/', verifyToken, crearSolicitud);
 
 // Aprobaciones (Solo roles autorizados) -> ¡Rutas corregidas!
-router.get('/', verifyToken, isAprobador, obtenerSolicitudesPendientes);
+router.get('/', verifyToken, obtenerSolicitudesPendientes);
 router.put('/:id/evaluar', verifyToken, isAprobador, evaluarSolicitud);
 
 export default router;

@@ -2,42 +2,44 @@ import { Solicitud, Activo, Account } from '../models/index.js';
 import * as solicitudService from '../services/solicitud.service.js';
 
 export const crearSolicitud = async (req, res) => {
-try {
-        // 1. Recibimos los datos exactos que manda el frontend
+    try {
         const { activo_id, tipo_operacion, justificacion, ubicacion_destino_id } = req.body;
         
-        // 2. Extraemos el ID del usuario de forma segura desde el token
-        const account_id = req.account?.id;
-	if (!activo_id) return res.status(400).json({ mensaje: "Debes seleccionar un activo." });
+        const account_id = req.account?.id; 
+        if (!activo_id) return res.status(400).json({ mensaje: "Debes seleccionar un activo." });
         if (!account_id) return res.status(400).json({ mensaje: "Error de sesión: No se detectó el ID del usuario." });
 
         const codigo_solicitud = `MOV-${Date.now().toString().slice(-6)}`;
-
+        
         const nuevaSolicitud = await Solicitud.create({
             codigo_solicitud,
             activo_id,
-            account_id,
+            solicitante_id: account_id,  // <-- Alineado con la Foreign Key de tu modelo
             tipo_operacion,
-            estado: 'Pendiente',
-            justificacion,
+            estado: 'pendiente',         // <-- Alineado con el ENUM en minúsculas
+            observaciones: justificacion, // <-- Mapeado al nombre de columna real en la BD
             ubicacion_destino_id: ubicacion_destino_id || null
         });
-
+        
         res.status(201).json({ mensaje: "Solicitud creada exitosamente", solicitud: nuevaSolicitud });
     } catch (error) {
-        console.error("🚨 Error al crear solicitud:", error);
+        console.error("❌ Error al crear solicitud:", error);
         res.status(500).json({ mensaje: "Error al crear la solicitud", error: error.message });
     }
 };
 
-// Nueva función: Solo para aprobadores
 export const obtenerSolicitudesPendientes = async (req, res) => {
     try {
+        const { id, role } = req.account;
+        const esAprobador = ['administrador', 'aprobador', 'supervisor'].includes(role.toLowerCase());
+
+        const whereClause = esAprobador ? {} : { solicitante_id: id };
+
         const solicitudes = await Solicitud.findAll({
-            where: { estado: 'pendiente' },
+            where: whereClause,
+            order: [['createdAt', 'DESC']],
             include: [
-                { model: Activo, attributes: ['codigo_patrimonial', 'descripcion'] },
-                // ¡AQUÍ FALTABA TRAER EL ID DEL USUARIO!
+                { model: Activo, attributes: ['codigo_patrimonial', 'descripcion', 'categoria'] },
                 { model: Account, as: 'Solicitante', attributes: ['id', 'nombre_usuario', 'email'] }
             ]
         });

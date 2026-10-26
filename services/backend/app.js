@@ -13,7 +13,8 @@ import solicitudRoutes from './src/routes/solicitud.routes.js';
 const app = express();
 
 const allowedOrigins = [
-  'http://34.176.181.10:8080'      // IP interna de slep-erp-server
+  'http://34.176.181.10:8080',      // IP interna de slep-erp-server
+  'http://localhost:5173'
 ].filter(Boolean);
 
 app.use(cors({
