@@ -3,22 +3,40 @@ import * as solicitudService from '../services/solicitud.service.js';
 
 export const crearSolicitud = async (req, res) => {
     try {
-        const { activo_id, tipo_operacion, justificacion, ubicacion_destino_id } = req.body;
+        const { 
+            activo_id, 
+            tipo_operacion, 
+            justificacion, 
+            ubicacion_destino_id,
+            fecha_inicio,
+            fecha_fin,
+            nombre_nuevo_activo 
+        } = req.body;
         
         const account_id = req.account?.id; 
-        if (!activo_id) return res.status(400).json({ mensaje: "Debes seleccionar un activo." });
+
         if (!account_id) return res.status(400).json({ mensaje: "Error de sesión: No se detectó el ID del usuario." });
+
+        if (tipo_operacion !== 'alta' && !activo_id) {
+            return res.status(400).json({ mensaje: "Debes seleccionar un activo." });
+        }
+        if (tipo_operacion === 'alta' && !nombre_nuevo_activo) {
+            return res.status(400).json({ mensaje: "Debes ingresar el nombre del nuevo activo a solicitar." });
+        }
 
         const codigo_solicitud = `MOV-${Date.now().toString().slice(-6)}`;
         
         const nuevaSolicitud = await Solicitud.create({
             codigo_solicitud,
-            activo_id,
-            solicitante_id: account_id,  // <-- Alineado con la Foreign Key de tu modelo
+            activo_id: tipo_operacion === 'alta' ? null : activo_id,
+            solicitante_id: account_id,
             tipo_operacion,
-            estado: 'pendiente',         // <-- Alineado con el ENUM en minúsculas
-            observaciones: justificacion, // <-- Mapeado al nombre de columna real en la BD
-            ubicacion_destino_id: ubicacion_destino_id || null
+            estado: 'pendiente',
+            observaciones: justificacion,
+            ubicacion_destino_id: ubicacion_destino_id || null,
+            fecha_inicio: fecha_inicio || null,
+            fecha_fin: fecha_fin || null,
+            nombre_nuevo_activo: nombre_nuevo_activo || null
         });
         
         res.status(201).json({ mensaje: "Solicitud creada exitosamente", solicitud: nuevaSolicitud });
@@ -49,19 +67,20 @@ export const obtenerSolicitudesPendientes = async (req, res) => {
     }
 };
 
-// Nueva función: Evaluar la solicitud
 export const evaluarSolicitud = async (req, res) => {
     try {
         const { id } = req.params;
-        const { estado, observaciones } = req.body;
+        const { estado, observaciones, datosAlta } = req.body; // Capturamos datosAlta
         const aprobador_id = req.account.id;
-
-        const actualizada = await solicitudService.procesarAprobacion(id, estado, observaciones, aprobador_id);
+        
+        const actualizada = await solicitudService.procesarAprobacion(id, estado, observaciones, aprobador_id, datosAlta);
+        
         res.status(200).json({ mensaje: `Solicitud ${estado} con éxito`, datos: actualizada });
     } catch (error) {
         res.status(400).json({ mensaje: error.message });
     }
 };
+
 export const actualizarEstadoSolicitud = async (req, res) => {
     try {
         const { id } = req.params;

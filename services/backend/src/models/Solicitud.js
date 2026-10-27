@@ -31,6 +31,18 @@ const Solicitud = sequelize.define('Solicitud', {
   ubicacion_destino_id: {
     type: DataTypes.INTEGER,
     allowNull: true, // Es null porque una "baja" no requiere destino
+  },
+  fecha_inicio: {
+    type: DataTypes.DATE,
+    allowNull: true, // Es null porque los traslados o bajas no usan tiempo
+  },
+  fecha_fin: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  nombre_nuevo_activo: {
+    type: DataTypes.STRING,
+    allowNull: true, // Solo tendrá texto si la operación es un "alta"
   }
 }, {
   tableName: 'solicitudes',

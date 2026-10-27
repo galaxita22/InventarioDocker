@@ -28,10 +28,8 @@ export const generarCodigoSolicitud = async (role, fecha) => {
     return `${prefijo}-${fechaCodigo}-${correlativo}`;
 };
 
-export const procesarAprobacion = async (id, estado, observaciones, aprobador_id) => {
-    // Iniciamos la transacción de seguridad
+export const procesarAprobacion = async (id, estado, observaciones, aprobador_id, datosAlta = null) => {
     const transaction = await sequelize.transaction();
-
     try {
         const solicitud = await Solicitud.findByPk(id, { transaction });
         if (!solicitud) throw new Error("Solicitud no encontrada");
@@ -40,40 +38,44 @@ export const procesarAprobacion = async (id, estado, observaciones, aprobador_id
             throw new Error("Por políticas de transparencia, no puedes aprobar tu propia solicitud.");
         }
 
-        if (['rechazada', 'devuelta'].includes(estado) && (!observaciones || observaciones.trim() === '')) {
-            throw new Error("Debe ingresar una observación al rechazar o devolver la solicitud.");
-        }
-
         solicitud.estado = estado;
         solicitud.aprobador_id = aprobador_id;
         if (observaciones) solicitud.observaciones = observaciones;
 
-        // EL IMPACTO EN EL INVENTARIO
         if (estado === 'aprobada') {
-            const activo = await Activo.findByPk(solicitud.activo_id, { transaction });
-            if (!activo) throw new Error("El activo vinculado no existe");
-
-            if (solicitud.tipo_operacion === 'traslado') {
-                if (!solicitud.ubicacion_destino_id) {
-                    throw new Error("Un traslado requiere tener una ubicación de destino");
-                }
-                activo.ubicacion_id = solicitud.ubicacion_destino_id;
+            if (solicitud.tipo_operacion === 'alta') {
+                if (!datosAlta) throw new Error("Debe clasificar el activo (categoría, ubicación, etc) para aprobar un alta.");
                 
-            } else if (solicitud.tipo_operacion === 'baja') {
-                activo.estado_conservacion = 'obsoleto';
-            }
+                const nuevoCodigo = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+                
+                const nuevoActivo = await Activo.create({
+                    codigo_patrimonial: nuevoCodigo,
+                    descripcion: solicitud.nombre_nuevo_activo,
+                    categoria: datosAlta.categoria,
+                    estado_conservacion: datosAlta.estado_conservacion,
+                    valor: datosAlta.valor || 0,
+                    ubicacion_id: datosAlta.ubicacion_id
+                }, { transaction });
 
-            await activo.save({ transaction });
+                solicitud.activo_id = nuevoActivo.id;
+            } else {
+                // ... (MANTÉN TU LÓGICA ACTUAL PARA TRASLADOS Y BAJAS AQUÍ) ...
+                const activo = await Activo.findByPk(solicitud.activo_id, { transaction });
+                if (!activo) throw new Error("El activo vinculado no existe");
+
+                if (solicitud.tipo_operacion === 'traslado') {
+                    activo.ubicacion_id = solicitud.ubicacion_destino_id;
+                } else if (solicitud.tipo_operacion === 'baja') {
+                    activo.estado_conservacion = 'obsoleto';
+                }
+                await activo.save({ transaction });
+            }
         }
 
         await solicitud.save({ transaction });
-        
-        // Confirmamos y guardamos ambos cambios en MySQL
         await transaction.commit();
         return solicitud;
-
     } catch (error) {
-        // Si cualquier cosa falla, deshacemos todos los cambios
         await transaction.rollback();
         throw error;
     }

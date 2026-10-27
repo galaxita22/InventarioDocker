@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, Plus, Folder, Clock, CheckCircle, AlertTriangle, Filter } from 'lucide-react';
 import api from '../../services/api'; 
 import './SolicitudesPage.css';
+import Select from 'react-select';
 
 interface Solicitud {
   id: number;
@@ -28,11 +29,25 @@ export default function SolicitudesPage() {
   const [listaActivos, setListaActivos] = useState<any[]>([]);
   const [listaUbicaciones, setListaUbicaciones] = useState<any[]>([]); // Estado para ubicaciones
   
+  const [modalAltaAbierto, setModalAltaAbierto] = useState(false);
+  const [solicitudAltaId, setSolicitudAltaId] = useState<number | null>(null);
+  const [formAlta, setFormAlta] = useState({
+    categoria: '',
+    ubicacion_id: '',
+    valor: 0,
+    estado_conservacion: 'nuevo'
+  });
+
+  const [filtroEstado, setFiltroEstado] = useState('');
+
   const [formSolicitud, setFormSolicitud] = useState({
     activo_id: '',
     tipo_operacion: 'asignacion',
     justificacion: '',
-    ubicacion_destino_id: '' // Nuevo campo para traslados
+    ubicacion_destino_id: '', 
+    fecha_inicio: '',       
+    fecha_fin: '',          
+    nombre_nuevo_activo: '' 
   });
 
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
@@ -63,13 +78,23 @@ export default function SolicitudesPage() {
   }, [BACKEND_URL]);
 
   const evaluarSolicitud = async (id: number, nuevoEstado: string) => {
+    let observaciones = '';
+    
+    // Si rechaza, le exigimos escribir el motivo
+    if (nuevoEstado === 'rechazada') {
+      const motivo = window.prompt("Por favor, ingresa el motivo del rechazo:");
+      if (motivo === null) return; // Si cancela el cuadro de diálogo, abortamos
+      if (motivo.trim() === '') {
+        alert("Debes ingresar un motivo obligatorio para rechazar la solicitud.");
+        return;
+      }
+      observaciones = motivo;
+    }
+
     try {
-      // Sequelize ENUM exige que viajen en minúsculas
-      const estadoDB = nuevoEstado.toLowerCase(); 
-      await api.put(`/api/solicitudes/${id}/evaluar`, { estado: estadoDB });
-      setSolicitudes(prev => 
-        prev.map(sol => sol.id === id ? { ...sol, estado: estadoDB } : sol)
-      );
+      // Enviamos el estado y la observación al backend
+      await api.put(`/api/solicitudes/${id}/evaluar`, { estado: nuevoEstado, observaciones });
+      setSolicitudes(prev => prev.map(sol => sol.id === id ? { ...sol, estado: nuevoEstado } : sol));
     } catch (error: any) {
       alert(error.response?.data?.mensaje || 'Error al evaluar la solicitud');
     }
@@ -78,30 +103,42 @@ export default function SolicitudesPage() {
  const handleCrearSolicitud = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Formateamos los datos para que coincidan 100% con los modelos de Sequelize
+      // 1. Armamos el payload incluyendo los nuevos campos temporales y de alta
       const payload = {
-        activo_id: parseInt(formSolicitud.activo_id),
+        activo_id: formSolicitud.tipo_operacion === 'alta' ? null : parseInt(formSolicitud.activo_id),
         tipo_operacion: formSolicitud.tipo_operacion,
-        observaciones: formSolicitud.justificacion, // Traducimos 'justificacion' a 'observaciones'
-        ubicacion_destino_id: formSolicitud.ubicacion_destino_id ? parseInt(formSolicitud.ubicacion_destino_id) : null
+        justificacion: formSolicitud.justificacion,
+        ubicacion_destino_id: formSolicitud.ubicacion_destino_id ? parseInt(formSolicitud.ubicacion_destino_id) : null,
+        fecha_inicio: formSolicitud.fecha_inicio || null,
+        fecha_fin: formSolicitud.fecha_fin || null,
+        nombre_nuevo_activo: formSolicitud.nombre_nuevo_activo || null
       };
-
-      const res = await api.post('/api/solicitudes', payload);
       
-      // El backend que armaste devuelve el objeto dentro de "res.data.datos"
+      const res = await api.post('/api/solicitudes', payload);
+             
       if (res.data.solicitud) {
         setSolicitudes([res.data.solicitud, ...solicitudes]);
       }
-      setModalAbierto(false); 
-      setFormSolicitud({ activo_id: '', tipo_operacion: 'asignacion', justificacion: '', ubicacion_destino_id: '' }); 
       
+      setModalAbierto(false);
+      
+      setFormSolicitud({ 
+        activo_id: '', 
+        tipo_operacion: 'asignacion', 
+        justificacion: '', 
+        ubicacion_destino_id: '',
+        fecha_inicio: '',
+        fecha_fin: '',
+        nombre_nuevo_activo: ''
+      });
+            
     } catch (error: any) {
       alert(error.response?.data?.mensaje || 'Error al crear la solicitud');
     }
   };
 
   const esAprobador = ['administrador', 'aprobador', 'supervisor'].includes(usuarioActual?.role?.toLowerCase());
-const [tabActiva, setTabActiva] = useState(esAprobador ? 'gestion' : 'mis_solicitudes');
+  const [tabActiva, setTabActiva] = useState(esAprobador ? 'gestion' : 'mis_solicitudes');
 
   // Métricas
   const total = solicitudes.length;
@@ -116,15 +153,47 @@ const [tabActiva, setTabActiva] = useState(esAprobador ? 'gestion' : 'mis_solici
   if (tabActiva === 'mis_solicitudes') {
     return esPropia;
   } else {
-    // Si es la pestaña de gestión, muestra todo EXCEPTO las propias
-    return !esPropia;
+    // PUNTO 1: En gestión solo vemos las de otros que estén "pendientes"
+    return !esPropia && sol.estado?.toLowerCase() === 'pendiente';
   }
 });
 
-const solicitudesFiltradas = solicitudesPorPestana.filter(sol =>
-  sol.codigo_solicitud?.toLowerCase().includes(busqueda.toLowerCase()) ||
-  sol.Activo?.descripcion?.toLowerCase().includes(busqueda.toLowerCase())
-);
+const opcionesActivos = listaActivos.map(activo => ({
+  value: String(activo.id),
+  label: `${activo.codigo_patrimonial} - ${activo.descripcion}`
+}));
+
+const solicitudesFiltradas = solicitudesPorPestana.filter(sol => {
+  const coincideBusqueda = sol.codigo_solicitud?.toLowerCase().includes(busqueda.toLowerCase()) ||
+                           sol.Activo?.descripcion?.toLowerCase().includes(busqueda.toLowerCase());
+  // PUNTO 2: Filtro real por estado
+  const coincideEstado = filtroEstado === '' || sol.estado?.toLowerCase() === filtroEstado.toLowerCase();
+  
+  return coincideBusqueda && coincideEstado;
+});
+
+const handleAprobarAltaConfirm = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!solicitudAltaId) return;
+  
+  try {
+    const payload = { 
+      estado: 'aprobada', 
+      datosAlta: {
+        ...formAlta,
+        ubicacion_id: parseInt(formAlta.ubicacion_id)
+      } 
+    };
+    
+    await api.put(`/api/solicitudes/${solicitudAltaId}/evaluar`, payload);
+    
+    setSolicitudes(prev => prev.map(sol => sol.id === solicitudAltaId ? { ...sol, estado: 'aprobada' } : sol));
+    setModalAltaAbierto(false);
+    setFormAlta({ categoria: '', ubicacion_id: '', valor: 0, estado_conservacion: 'nuevo' });
+  } catch (error: any) {
+    alert(error.response?.data?.mensaje || 'Error al aprobar el alta');
+  }
+};
 
   return (
     <div className="page-container">
@@ -206,7 +275,16 @@ const solicitudesFiltradas = solicitudesPorPestana.filter(sol =>
             />
           </div>
           <div className="table-filters">
-            <button className="btn-filter">Todos los estados <Filter size={16}/></button>
+            <select 
+              value={filtroEstado} 
+              onChange={(e) => setFiltroEstado(e.target.value)}
+              style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', color: '#475569' }}
+            >
+              <option value="">Todos los estados</option>
+              <option value="pendiente">Pendientes</option>
+              <option value="aprobada">Aprobadas</option>
+              <option value="rechazada">Rechazadas</option>
+            </select>
           </div>
         </div>
 
@@ -237,7 +315,6 @@ const solicitudesFiltradas = solicitudesPorPestana.filter(sol =>
   </div>
 ) : (
   <table className="solicitudes-table">
-    {/* PEGA AQUÍ EL MISMO THEAD Y TBODY QUE YA TENÍAS PARA LA TABLA */}
     <thead>
       <tr>
         <th>N° SOLICITUD</th>
@@ -273,7 +350,18 @@ const solicitudesFiltradas = solicitudesPorPestana.filter(sol =>
             </td>
             <td>
               <div className="admin-actions">
-                <button className="btn-aprobar" onClick={() => evaluarSolicitud(sol.id, 'aprobada')} title="Aprobar Solicitud">
+                <button 
+                  className="btn-aprobar" 
+                  onClick={() => {
+                    if (sol.tipo_operacion === 'alta') {
+                      setSolicitudAltaId(sol.id);
+                      setModalAltaAbierto(true); // Abre el modal de clasificación en lugar de aprobar directo
+                    } else {
+                      evaluarSolicitud(sol.id, 'aprobada');
+                    }
+                  }} 
+                  title="Aprobar Solicitud"
+                >
                   <CheckCircle size={18} />
                 </button>
                 <button className="btn-rechazar" onClick={() => evaluarSolicitud(sol.id, 'rechazada')} title="Rechazar Solicitud">
@@ -289,6 +377,73 @@ const solicitudesFiltradas = solicitudesPorPestana.filter(sol =>
 )}
       </div>
 
+      {/* MODAL PARA CLASIFICAR UN ALTA NUEVA ANTES DE APROBAR */}
+      {modalAltaAbierto && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h2>Clasificar Nuevo Ingreso</h2>
+            <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '16px' }}>Asigna los datos técnicos del equipo para ingresarlo al inventario.</p>
+            
+            <form onSubmit={handleAprobarAltaConfirm}>
+              <div className="form-group">
+                <label>Categoría</label>
+                <input 
+                  type="text" 
+                  placeholder="Ej: Computación, Mobiliario..."
+                  value={formAlta.categoria}
+                  onChange={(e) => setFormAlta({...formAlta, categoria: e.target.value})}
+                  required
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Ubicación Asignada</label>
+                <select 
+                  value={formAlta.ubicacion_id}
+                  onChange={(e) => setFormAlta({...formAlta, ubicacion_id: e.target.value})}
+                  required
+                >
+                  <option value="">Seleccione una ubicación</option>
+                  {/* Reutilizamos el estado de ubicaciones que debes tener en el archivo */}
+                  <option value="1">Bodega Central</option> 
+                  <option value="2">Laboratorio Computación</option>
+                </select>
+              </div>
+
+              <div className="date-row">
+                <div className="form-group">
+                  <label>Estado Físico</label>
+                  <select 
+                    value={formAlta.estado_conservacion}
+                    onChange={(e) => setFormAlta({...formAlta, estado_conservacion: e.target.value})}
+                    required
+                  >
+                    <option value="nuevo">Nuevo</option>
+                    <option value="bueno">Bueno</option>
+                    <option value="regular">Regular</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Valor Monetario ($)</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={formAlta.valor}
+                    onChange={(e) => setFormAlta({...formAlta, valor: parseInt(e.target.value) || 0})}
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="modal-actions">
+                <button type="button" className="btn-cancelar" onClick={() => setModalAltaAbierto(false)}>Cancelar</button>
+                <button type="submit" className="btn-guardar">Aprobar y Crear Activo</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DE NUEVA SOLICITUD */}
       {modalAbierto && (
         <div className="modal-overlay">
@@ -297,19 +452,26 @@ const solicitudesFiltradas = solicitudesPorPestana.filter(sol =>
             <form onSubmit={handleCrearSolicitud}>
               
               <div className="form-group">
-                <label>Seleccionar Activo</label>
-                <select 
-                  required
-                  value={formSolicitud.activo_id}
-                  onChange={(e) => setFormSolicitud({...formSolicitud, activo_id: e.target.value})}
-                >
-                  <option value="" disabled>Elige un activo de la lista...</option>
-                  {listaActivos.map(activo => (
-                    <option key={activo.id} value={activo.id}>
-                      {activo.codigo_patrimonial} - {activo.descripcion}
-                    </option>
-                  ))}
-                </select>
+                <label>{formSolicitud.tipo_operacion === 'alta' ? 'Nombre del Nuevo Activo' : 'Seleccionar Activo'}</label>
+  
+                {/* Si es ALTA, mostramos un input de texto. Si no, mostramos el buscador */}
+                {formSolicitud.tipo_operacion === 'alta' ? (
+                  <input 
+                    type="text" 
+                    placeholder="Ej: Proyector Epson X100"
+                    value={formSolicitud.nombre_nuevo_activo}
+                    onChange={(e) => setFormSolicitud({...formSolicitud, nombre_nuevo_activo: e.target.value})}
+                    required
+                  />
+                ) : (
+                  <Select 
+                    options={opcionesActivos}
+                    placeholder="Escribe para buscar un activo..."
+                    onChange={(opcion) => setFormSolicitud({...formSolicitud, activo_id: opcion ? opcion.value : ''})}
+                    isClearable
+                    noOptionsMessage={() => "No se encontraron activos"}
+                  />
+                )}
               </div>
 
               <div className="form-group">
@@ -326,10 +488,41 @@ const solicitudesFiltradas = solicitudesPorPestana.filter(sol =>
                 </select>
               </div>
 
+              {formSolicitud.tipo_operacion === 'asignacion' && (
+                <div className="date-row">
+                  <div className="form-group">
+                    <label>Fecha de Inicio</label>
+                    <input 
+                      type="date" 
+                      value={formSolicitud.fecha_inicio}
+                      onChange={(e) => setFormSolicitud({...formSolicitud, fecha_inicio: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Devolución Esperada</label>
+                    <input 
+                      type="date" 
+                      value={formSolicitud.fecha_fin}
+                      onChange={(e) => setFormSolicitud({...formSolicitud, fecha_fin: e.target.value})}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* CAMPO DINÁMICO: UBICACIÓN DE DESTINO */}
               {formSolicitud.tipo_operacion === 'traslado' && (
                 <div className="form-group" style={{ animation: 'fadeIn 0.2s ease-in-out' }}>
                   <label>Ubicación de Destino</label>
+                  {(() => {
+                    const activoSel = listaActivos.find(a => String(a.id) === String(formSolicitud.activo_id));
+                    return activoSel ? (
+                      <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '8px', padding: '8px', backgroundColor: '#f1f5f9', borderRadius: '6px' }}>
+                        📍 Origen actual: <strong>{activoSel.Ubicacion?.nombre || 'Bodega Central'}</strong>
+                      </p>
+                    ) : null;
+                  })()}
                   <select 
                     required
                     value={formSolicitud.ubicacion_destino_id}
