@@ -1,14 +1,11 @@
-version: '3.8'
+
 services:
   db:
     image: mysql:8
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
+    env_file:
+      - .env
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     # 1. Agrega el test de salud para MySQL
@@ -25,17 +22,13 @@ services:
     volumes:
       - ./services/backend:/app
       - /app/node_modules
-    environment:
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
-      - JWT_SECRET=${JWT_SECRET}
+    env_file:
+      - .env
     # 2. Obliga al backend a esperar el estado "healthy"
     depends_on:
       db:
         condition: service_healthy
+    command: sh -c "npm run seed && npm run dev"
 
   frontend:
     build: ./services/frontend
