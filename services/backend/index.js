@@ -3,9 +3,15 @@ import app from "./app.js";
 import sequelize from "./src/database/connection.js";
 import './src/models/index.js';
 
+// 1. IMPORTAS EL NUEVO MIDDLEWARE DE IA
+import { llmErrorAnalyzer } from './src/middlewares/localLlmErrorHandler.js';
+
 dotenv.config();
 
 const PORT = process.env.PORT || 3000;
+
+// 2. LO CONECTAS A EXPRESS (Siempre antes del listen para que atrape los errores de las rutas de app.js)
+app.use(llmErrorAnalyzer);
 
 // Aquí está la magia:
 sequelize.sync({ alter: true }) 

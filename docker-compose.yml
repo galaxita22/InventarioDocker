@@ -2,6 +2,7 @@
 services:
   db:
     image: mysql:8
+    restart: unless-stopped
     env_file:
       - .env
     ports:
@@ -15,8 +16,17 @@ services:
       timeout: 5s
       retries: 5
 
+  llm-server:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Opcional pero recomendado: asignar la GPU si tienes configurado WSL con soporte NVIDIA
+
   backend:
     build: ./services/backend
+    restart: unless-stopped
     ports:
       - "3000:3000"
     volumes:
@@ -32,6 +42,7 @@ services:
 
   frontend:
     build: ./services/frontend
+    restart: unless-stopped
     ports:
       - "5173:8080"
     volumes:
@@ -40,5 +51,7 @@ services:
     depends_on:
       - backend
 
+
 volumes:
   mysql_data:
+  ollama_data:
