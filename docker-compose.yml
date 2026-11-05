@@ -8,6 +8,8 @@ services:
       - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+    networks:
+      - internal
     # 1. Agrega el test de salud para MySQL
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
@@ -17,28 +19,61 @@ services:
 
   backend:
     build: ./services/backend
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./services/backend:/app
-      - /app/node_modules
+    expose:
+      - "3000"
     env_file:
       - .env
-    # 2. Obliga al backend a esperar el estado "healthy"
+    environment:
+      DB_HOST: db
+    restart: always
+    networks:
+      - default
+      - internal
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    command: npm start
+
+  db-init:
+    build: ./services/backend
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+    restart: "no"
+    networks:
+      - internal
     depends_on:
       db:
         condition: service_healthy
-    command: sh -c "npm run seed && npm run dev"
+    command: npm run seed
+
+  loadbalancer:
+    image: nginx:alpine
+    ports:
+      - "3000:3000"
+    networks:
+      - default
+    volumes:
+      - ./nginx/load-balancer.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
 
   frontend:
     build: ./services/frontend
     ports:
-      - "5173:8080"
-    volumes:
-      - ./services/frontend:/app
-      - /app/node_modules
+      - "5173:80"
+    networks:
+      - default
     depends_on:
-      - backend
+      - loadbalancer
 
 volumes:
   mysql_data:
+
+networks:
+  default:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true

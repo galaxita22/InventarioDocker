@@ -7,7 +7,7 @@ import DashboardPage from '../pages/Dashboard/DashboardPage';
 import ActivosPage from '../pages/Activos/ActivosPage';
 import FichaActivoPage from '../pages/Activos/FichaActivoPage'; // <- Faltaba esta importación
 import SolicitudesPage from '../pages/Solicitudes/SolicitudesPage';
-
+import UsuariosPage from '../pages/Usuarios/UsuariosPage'; // <- Faltaba esta importación
 export default function AppRouter() {
   const [auth, setAuth] = useState({
     isLoggedIn: Boolean(localStorage.getItem('token')),
@@ -41,7 +41,7 @@ export default function AppRouter() {
           <Route path="/activos" element={<ActivosPage />} />
           <Route path="/activos/:id" element={<FichaActivoPage />} />
           <Route path="/solicitudes" element={<SolicitudesPage />} />
-          
+          <Route path="/usuarios" element={<UsuariosPage />} />
           {/* Ruta 404 Interna */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>

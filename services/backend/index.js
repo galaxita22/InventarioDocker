@@ -7,7 +7,6 @@ dotenv.config();
 
 const PORT = process.env.PORT || 3000;
 
-// Aquí está la magia:
 sequelize.sync({ alter: true }) 
     .then(() => {
         console.log("⋅˚₊‧ 𐙚 ‧₊˚ ⋅ Conexión a la base de datos establecida y modelos sincronizados ⋅˚₊‧ 𐙚 ‧₊˚ ⋅");

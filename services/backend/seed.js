@@ -1,18 +1,61 @@
 import bcrypt from "bcryptjs";
 import sequelize from "./src/database/connection.js";
-import { Account, Establecimiento, Ubicacion, Activo, Solicitud } from "./src/models/index.js";
+import { Account, Establecimiento, Ubicacion, Activo, Solicitud, Rol, Permiso } from "./src/models/index.js";
 
 const poblarBaseDeDatos = async () => {
   try {
     console.log("⏳ Conectando a la base de datos...");
     await sequelize.authenticate();
-    
-    console.log("🔨 Reconstruyendo la base de datos desde cero (force: true)...");
-    // force: true destruye las tablas existentes y las recrea limpias con los nuevos modelos
+    await sequelize.sync();
+
+    if (await Rol.count() > 0) {
+      const [inventarioLeer] = await Permiso.findOrCreate({
+        where: { modulo: 'inventario', accion: 'leer' },
+        defaults: { descripcion_visual: 'Ver inventario de activos' }
+      });
+      const adminRole = await Rol.findOne({ where: { nombre: 'Administrador' } });
+      if (adminRole) {
+        await adminRole.addPermiso(inventarioLeer);
+      }
+      console.log("✅ Base de datos ya inicializada; se conservan los roles y permisos existentes.");
+      return;
+    }
+
+    console.log("🔨 Inicializando la base de datos...");
     await sequelize.sync({ force: true });
 
+    // --- NUEVA SECCIÓN: RBAC (ROLES Y PERMISOS) ---
+    console.log("🛡️ Creando motor de permisos y roles...");
+    const listaPermisos = [
+        { modulo: 'usuarios', accion: 'leer', descripcion_visual: 'Ver lista del personal' },
+        { modulo: 'usuarios', accion: 'editar', descripcion_visual: 'Modificar roles y accesos' },
+        { modulo: 'solicitudes', accion: 'leer_todas', descripcion_visual: 'Ver solicitudes de todos los usuarios' },
+        { modulo: 'solicitudes', accion: 'aprobar', descripcion_visual: 'Aprobar o rechazar solicitudes' },
+        { modulo: 'inventario', accion: 'leer', descripcion_visual: 'Ver inventario de activos' },
+        { modulo: 'inventario', accion: 'crear', descripcion_visual: 'Ingresar activos nuevos' },
+        { modulo: 'inventario', accion: 'editar', descripcion_visual: 'Modificar ficha técnica' },
+        { modulo: 'inventario', accion: 'eliminar', descripcion_visual: 'Dar de baja activos' }
+    ];
+    const permisosCreados = await Permiso.bulkCreate(listaPermisos);
+
+    const rolAdmin = await Rol.create({ nombre: 'Administrador', color: '#dc2626', descripcion: 'Acceso total y control' });
+    const rolAprob = await Rol.create({ nombre: 'Aprobador', color: '#4f46e5', descripcion: 'Gestión operativa' });
+    const rolSol = await Rol.create({ nombre: 'Solicitante', color: '#475569', descripcion: 'Usuario estándar' });
+
+    await rolAdmin.addPermisos(permisosCreados);
+    const permisosAprobador = permisosCreados.filter(p => 
+        p.modulo === 'solicitudes' || (p.modulo === 'inventario' && p.accion === 'crear')
+    );
+    await rolAprob.addPermisos(permisosAprobador);
+
+    // --- SECCIÓN DE USUARIOS ---
     console.log("👤 Creando usuarios base...");
     const contrasenaHash = await bcrypt.hash('123456', 10);
+
+    // Buscamos explícitamente los roles en la base de datos para evitar errores de referencia
+    const adminRole = await Rol.findOne({ where: { nombre: 'Administrador' } });
+    const aprobRole = await Rol.findOne({ where: { nombre: 'Aprobador' } });
+    const solRole = await Rol.findOne({ where: { nombre: 'Solicitante' } });
 
     const usuariosBase = [
       {
@@ -20,7 +63,7 @@ const poblarBaseDeDatos = async () => {
         nombre_usuario: 'Administrador Sistema',
         email: 'admin@slep.cl',
         contrasena: contrasenaHash,
-        role: 'administrador',
+        rol_id: adminRole ? adminRole.id : 1,
         first_login: false
       },
       {
@@ -28,7 +71,7 @@ const poblarBaseDeDatos = async () => {
         nombre_usuario: 'Aprobador Director',
         email: 'aprobador@slep.cl',
         contrasena: contrasenaHash,
-        role: 'aprobador',
+        rol_id: aprobRole ? aprobRole.id : 2,
         first_login: false
       },
       {
@@ -36,7 +79,7 @@ const poblarBaseDeDatos = async () => {
         nombre_usuario: 'Solicitante Docente',
         email: 'solicitante@slep.cl',
         contrasena: contrasenaHash,
-        role: 'solicitante',
+        rol_id: solRole ? solRole.id : 3,
         first_login: false
       }
     ];
@@ -45,6 +88,7 @@ const poblarBaseDeDatos = async () => {
       await Account.create(user);
     }
 
+    // --- SECCIÓN DE ESTABLECIMIENTOS Y ACTIVOS ---
     console.log("🏫 Creando Establecimientos y Ubicaciones...");
     const colegio = await Establecimiento.create({
       rbd: '12345-6',
@@ -69,30 +113,9 @@ const poblarBaseDeDatos = async () => {
 
     console.log("💻 Insertando Activos Fijos...");
     const activos = [
-      { 
-        codigo_patrimonial: 'INV-2026-001', 
-        descripcion: 'Laptop Dell XPS 15', 
-        categoria: 'Hardware', 
-        estado_conservacion: 'nuevo', 
-        valor: 850000, 
-        ubicacion_id: bodega.id 
-      },
-      { 
-        codigo_patrimonial: 'INV-2026-002', 
-        descripcion: 'Monitor Samsung 27"', 
-        categoria: 'Periféricos', 
-        estado_conservacion: 'bueno', 
-        valor: 150000, 
-        ubicacion_id: salaComputacion.id 
-      },
-      { 
-        codigo_patrimonial: 'INV-2026-003', 
-        descripcion: 'Proyector Epson X100', 
-        categoria: 'Audiovisual', 
-        estado_conservacion: 'regular', 
-        valor: 320000, 
-        ubicacion_id: bodega.id 
-      }
+      { codigo_patrimonial: 'INV-2026-001', descripcion: 'Laptop Dell XPS 15', categoria: 'Hardware', estado_conservacion: 'nuevo', valor: 850000, ubicacion_id: bodega.id },
+      { codigo_patrimonial: 'INV-2026-002', descripcion: 'Monitor Samsung 27"', categoria: 'Periféricos', estado_conservacion: 'bueno', valor: 150000, ubicacion_id: salaComputacion.id },
+      { codigo_patrimonial: 'INV-2026-003', descripcion: 'Proyector Epson X100', categoria: 'Audiovisual', estado_conservacion: 'regular', valor: 320000, ubicacion_id: bodega.id }
     ];
 
     for (const activo of activos) {
@@ -108,5 +131,4 @@ const poblarBaseDeDatos = async () => {
   }
 };
 
-// Llamada correcta a la función
 poblarBaseDeDatos();

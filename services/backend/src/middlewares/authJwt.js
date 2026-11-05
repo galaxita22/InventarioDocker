@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { Account, Rol, Permiso } from '../models/index.js';
 
 export const verifyToken = (req, res, next) => {
     try {
@@ -19,20 +20,42 @@ export const verifyToken = (req, res, next) => {
     }
 };
 
-export const isAdministrador = (req, res, next) => {
-    // Ajustado al rol exacto de tu nuevo modelo Account
-    if (req.account.role !== 'administrador') {
-        return res.status(403).json({ message: "Acceso denegado: Requiere rol de Administrador" });
-    }
-    next();
+export const isAdministrador = async (req, res, next) => {
+    return requirePermission('usuarios', 'editar')(req, res, next);
 };
 
 export const isAprobador = (req, res, next) => {
-    // Definimos quiénes tienen poder de firma en el SLEP
-    const rolesPermitidos = ['aprobador', 'administrador', 'supervisor'];
-    
-    if (!rolesPermitidos.includes(req.account.role)) {
-        return res.status(403).json({ mensaje: "Acceso denegado: Requiere permisos de aprobación" });
+    return requirePermission('solicitudes', 'aprobar')(req, res, next);
+};
+
+export const getAccountPermissions = async (accountId) => {
+    const account = await Account.findByPk(accountId, {
+        include: [{
+            model: Rol,
+            as: 'NivelAcceso',
+            include: [{ model: Permiso, as: 'Permisos' }]
+        }]
+    });
+
+    return account?.NivelAcceso?.Permisos || [];
+};
+
+export const hasPermission = async (accountId, modulo, accion) => {
+    const permisos = await getAccountPermissions(accountId);
+    return permisos.some((permiso) => permiso.modulo === modulo && permiso.accion === accion);
+};
+
+export const requirePermission = (modulo, accion) => async (req, res, next) => {
+    try {
+        if (await hasPermission(req.account.id, modulo, accion)) {
+            return next();
+        }
+
+        return res.status(403).json({
+            mensaje: `Acceso denegado: requiere el permiso ${modulo}.${accion}`
+        });
+    } catch (error) {
+        console.error('Error validando permisos:', error);
+        return res.status(500).json({ mensaje: 'Error validando permisos' });
     }
-    next();
 };

@@ -1,5 +1,6 @@
 import { DataTypes } from 'sequelize';
 import sequelize from '../database/connection.js';
+import Rol from './Rol.js';
 
 const Account = sequelize.define('Account', {
   id: {
@@ -25,11 +26,9 @@ const Account = sequelize.define('Account', {
     type: DataTypes.STRING,
     allowNull: false,
   },
-  role: {
-    // Definimos estrictamente los roles que pide el SLEP
-    type: DataTypes.ENUM('solicitante', 'aprobador', 'administrador', 'supervisor'),
-    defaultValue: 'solicitante',
-    allowNull: false,
+  rol_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true, // Permite null por si alguien se registra y aún no se le asigna rol
   },
   first_login: {
     type: DataTypes.BOOLEAN,
@@ -43,5 +42,6 @@ const Account = sequelize.define('Account', {
   tableName: 'accounts',
   timestamps: true,
 });
-
+Account.belongsTo(Rol, { foreignKey: 'rol_id', as: 'NivelAcceso' });
+Rol.hasMany(Account, { foreignKey: 'rol_id', as: 'Usuarios' });
 export default Account;
