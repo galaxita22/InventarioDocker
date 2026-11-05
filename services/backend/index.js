@@ -2,11 +2,13 @@ import dotenv from "dotenv";
 import app from "./app.js";
 import sequelize from "./src/database/connection.js";
 import './src/models/index.js';
+import { llmErrorAnalyzer } from './src/middlewares/localLlmErrorHandler.js';
 
 dotenv.config();
 
 const PORT = process.env.PORT || 3000;
 
+app.use(llmErrorAnalyzer);
 sequelize.sync({ alter: true }) 
     .then(() => {
         console.log("⋅˚₊‧ 𐙚 ‧₊˚ ⋅ Conexión a la base de datos establecida y modelos sincronizados ⋅˚₊‧ 𐙚 ‧₊˚ ⋅");

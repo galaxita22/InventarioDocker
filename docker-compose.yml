@@ -2,6 +2,7 @@
 services:
   db:
     image: mysql:8
+    restart: unless-stopped
     env_file:
       - .env
     ports:
@@ -10,21 +11,32 @@ services:
       - mysql_data:/var/lib/mysql
     networks:
       - internal
-    # 1. Agrega el test de salud para MySQL
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  llm-server:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Opcional pero recomendado: asignar la GPU si tienes configurado WSL con soporte NVIDIA
+
   backend:
     build: ./services/backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./services/backend:/app
+      - /app/node_modules
     expose:
       - "3000"
     env_file:
       - .env
-    environment:
-      DB_HOST: db
     restart: always
     networks:
       - default
@@ -48,6 +60,9 @@ services:
         condition: service_healthy
     command: npm run seed
 
+  frontend:
+    build: ./services/frontend
+    restart: unless-stopped
   loadbalancer:
     image: nginx:alpine
     ports:
@@ -59,6 +74,10 @@ services:
     depends_on:
       - backend
 
+
+volumes:
+  mysql_data:
+  ollama_data:
   frontend:
     build: ./services/frontend
     ports:
@@ -67,9 +86,6 @@ services:
       - default
     depends_on:
       - loadbalancer
-
-volumes:
-  mysql_data:
 
 networks:
   default:
