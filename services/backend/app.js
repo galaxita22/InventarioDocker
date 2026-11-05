@@ -9,7 +9,7 @@ import establecimientoRoutes from './src/routes/establecimiento.routes.js';
 import ubicacionRoutes from './src/routes/ubicacion.routes.js';
 import activoRoutes from './src/routes/activo.routes.js';
 import solicitudRoutes from './src/routes/solicitud.routes.js';
-
+import rolesRoutes from './src/routes/roles.routes.js'; // Nueva ruta para roles y permisos
 const app = express();
 
 const allowedOrigins = [
@@ -44,6 +44,7 @@ app.use('/api/establecimientos', establecimientoRoutes);
 app.use('/api/ubicaciones', ubicacionRoutes);
 app.use('/api/activos', activoRoutes); // ¡Te faltaba activar esta línea!
 app.use('/api/solicitudes', solicitudRoutes);
+app.use('/api/roles', rolesRoutes); // Nueva ruta para roles y permisos
 
 app.use((error, _req, res, next) => {
     if (error instanceof multer.MulterError) {

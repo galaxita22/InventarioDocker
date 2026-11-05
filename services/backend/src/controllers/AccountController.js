@@ -1,4 +1,5 @@
 import * as accountService from "../services/account.service.js"
+import { Account, Rol } from "../models/index.js";
 
 export const register = async (req, res) => {
     try {
@@ -16,6 +17,19 @@ export const login = async (req, res) => {
         res.status(200).json({ message: "Inicio de sesión exitoso", ...result });
     } catch (error) {
         res.status(401).json({ message: error.message || "Ocurrio un error al iniciar sesión" });
+    }
+};
+
+export const asignarRol = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { rol_id } = req.body;
+        
+        await accountService.asignarRolUsuario(id, rol_id);
+        
+        res.status(200).json({ message: "Rol asignado con éxito" });
+    } catch (error) {
+        res.status(400).json({ message: error.message || "Error al asignar rol" });
     }
 };
 
@@ -67,10 +81,17 @@ export const updatePassword = async (req, res) => {
 
 export const getAllUsers = async (req, res) => {
     try {
-        const users = await accountService.getAllUsers();
+        const users = await Account.findAll({
+            include: [{
+                model: Rol,
+                as: 'NivelAcceso', // O el alias que uses en tu relación en models/index.js
+                attributes: ['id', 'nombre', 'color']
+            }],
+            attributes: { exclude: ['contrasena'] } // Nunca expongas las contraseñas
+        });
         res.status(200).json(users);
     } catch (error) {
-        res.status(500).json({ message: error.message || "Ocurrio un error al obtener los usuarios" });
+        res.status(500).json({ message: error.message || "Error al obtener usuarios" });
     }
 };
 

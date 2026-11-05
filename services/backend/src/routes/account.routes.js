@@ -1,6 +1,6 @@
 import express from "express";
 import * as controllerAccount from "../controllers/AccountController.js";
-import { isAdministrador, verifyToken } from "../middlewares/authJwt.js";
+import { requirePermission, verifyToken } from "../middlewares/authJwt.js";
 import uploadImage from "../middlewares/uploadImage.js";
 
 const router = express.Router();
@@ -12,10 +12,10 @@ router.put("/change-password/:id", verifyToken, controllerAccount.updatePassword
 router.get("/:id", verifyToken, controllerAccount.getByID);
 
 router.post("/register", controllerAccount.register);
-router.put("/:id", verifyToken, isAdministrador, controllerAccount.update);
-router.delete("/:id", verifyToken, isAdministrador, controllerAccount.deleteAccount);
-
-router.get("/", verifyToken, isAdministrador, controllerAccount.getAllUsers);
+router.put("/:id", verifyToken, requirePermission('usuarios', 'editar'), controllerAccount.update);
+router.delete("/:id", verifyToken, requirePermission('usuarios', 'editar'), controllerAccount.deleteAccount);
+router.put('/:id/rol', verifyToken, requirePermission('usuarios', 'editar'), controllerAccount.asignarRol);
+router.get("/", verifyToken, requirePermission('usuarios', 'leer'), controllerAccount.getAllUsers);
 
 router.patch("/first-login/:id", verifyToken, controllerAccount.firstLoginFalse);
 router.post("/:id/avatar", verifyToken, uploadImage.single("imagen"), controllerAccount.uploadAvatar);

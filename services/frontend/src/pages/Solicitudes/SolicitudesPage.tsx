@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Folder, Clock, CheckCircle, AlertTriangle, Filter } from 'lucide-react';
+import { Search, Plus, Folder, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
 import api from '../../services/api'; 
 import './SolicitudesPage.css';
 import Select from 'react-select';

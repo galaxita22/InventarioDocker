@@ -1,5 +1,6 @@
 import { Solicitud, Activo, Account } from '../models/index.js';
 import * as solicitudService from '../services/solicitud.service.js';
+import { hasPermission } from '../middlewares/authJwt.js';
 
 export const crearSolicitud = async (req, res) => {
     try {
@@ -48,8 +49,8 @@ export const crearSolicitud = async (req, res) => {
 
 export const obtenerSolicitudesPendientes = async (req, res) => {
     try {
-        const { id, role } = req.account;
-        const esAprobador = ['administrador', 'aprobador', 'supervisor'].includes(role.toLowerCase());
+        const { id } = req.account;
+        const esAprobador = await hasPermission(id, 'solicitudes', 'leer_todas');
 
         const whereClause = esAprobador ? {} : { solicitante_id: id };
 

@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { Account } from "../models/index.js";
+import { Account, Rol } from "../models/index.js";
 import jwt from "jsonwebtoken";
 import { Op } from "sequelize";
 import { validarRut, calcularDV } from "../utils/validators.js";
@@ -65,24 +65,40 @@ export const registerAccount = async (data) => {
 };
 
 export const loginAccount = async (email, contrasena) => {
-    const account = await Account.findOne({ where: { email } });
-    if (!account) throw new Error("Correo o contraseña incorrectos");
+    // 2. Modificamos la búsqueda para INCLUIR la relación con Rol
+    const account = await Account.findOne({
+        where: { email },
+        include: [{ model: Rol, as: 'NivelAcceso' }] // <-- EL PUENTE MÁGICO
+    });
 
-    const isPasswordValid = await bcrypt.compare(contrasena, account.contrasena);
-    if (!isPasswordValid) throw new Error("Correo o contraseña incorrectos");
+    if (!account) {
+        throw new Error("Usuario no encontrado");
+    }
 
-    const payload = { 
-        id: account.id, 
-        email: account.email, 
-        nombre_usuario: account.nombre_usuario, 
-        role: account.role 
+    const passwordValido = await bcrypt.compare(contrasena, account.contrasena);
+    if (!passwordValido) {
+        throw new Error("Contraseña incorrecta");
+    }
+
+    const nombreRol = account.NivelAcceso ? account.NivelAcceso.nombre.toLowerCase() : 'solicitante';
+
+    const token = jwt.sign(
+        { id: account.id, role: nombreRol }, 
+        process.env.JWT_SECRET || 'secreto_super_seguro', 
+        { expiresIn: 86400 } // 24 horas
+    );
+    return {
+        token,
+        account: {
+            id: account.id,
+            nombre_usuario: account.nombre_usuario,
+            email: account.email,
+            role: nombreRol, // <-- Inyectamos el rol aquí para el frontend
+            first_login: account.first_login,
+            avatar_ref: account.avatar_ref
+        }
     };
-    
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "24h" });
-
-    return { token, account };
 };
-
 export const renewToken = async (token) => {
     if (!token) {
         throw new Error("No se proporcionó un token");
@@ -275,3 +291,13 @@ export const deleteAvatar = async (id, requester) => {
     
     return account;
 };
+
+export const asignarRolUsuario = async (usuarioId, rol_id) => {
+    const usuario = await Account.findByPk(usuarioId);
+    if (!usuario) throw new Error("Usuario no encontrado");
+    
+    usuario.rol_id = rol_id;
+    await usuario.save();
+    return usuario;
+};
+    
