@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import multer from "multer";
+import chatRoutes from './src/routes/chat.routes.js';
 
 // Rutas de la nueva arquitectura SLEP
 import accountRoutes from "./src/routes/account.routes.js";
@@ -45,6 +46,7 @@ app.use('/api/ubicaciones', ubicacionRoutes);
 app.use('/api/activos', activoRoutes); // ¡Te faltaba activar esta línea!
 app.use('/api/solicitudes', solicitudRoutes);
 app.use('/api/roles', rolesRoutes); // Nueva ruta para roles y permisos
+app.use('/api/chat', chatRoutes);
 
 app.use((error, _req, res, next) => {
     if (error instanceof multer.MulterError) {
